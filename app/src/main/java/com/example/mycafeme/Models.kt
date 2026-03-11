@@ -121,13 +121,16 @@ data class OrderData(
     val id: String,
 
     @SerializedName(value = "Order_NetPrice", alternate = ["net_price", "total_price"])
-    val netPrice: String, //  ใช้ netPrice ให้ตรงกับฐานข้อมูล
+    val netPrice: String, // ใช้ netPrice ให้ตรงกับฐานข้อมูล
 
     @SerializedName(value = "Order_Date", alternate = ["order_date"])
     val orderDate: String?,
 
     @SerializedName(value = "Status_Status_ID", alternate = ["status", "status_id"])
-    val status: String? //  ใช้ status ดึงข้อมูล Status_Status_ID
+    val status: String?, // 👈 เติมลูกน้ำ (,) ตรงนี้ครับ
+
+    @SerializedName("Cafe_Name")
+    val cafeName: String
 )
 
 data class OrderResponse(val success: Boolean, val data: List<OrderData>)
@@ -178,8 +181,10 @@ data class BillListData(
     @SerializedName("Order_Id") val id: String,
     @SerializedName("Order_Date") val date: String,
     @SerializedName("Order_NetPrice") val totalPrice: Double,
-    @SerializedName("Order_status") val status: String
+    @SerializedName("Order_status") val status: String,
+    @SerializedName("Cafe_Name") val cafeName: String // 👈 เพิ่มบรรทัดนี้ครับ
 )
+
 
 // กล่องรับรายละเอียดเมนูในบิล (หน้า Detail)
 data class BillDetailResponse(

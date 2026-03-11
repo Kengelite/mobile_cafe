@@ -1,6 +1,10 @@
 @file:OptIn(ExperimentalMaterial3Api::class)
 package com.example.mycafeme
 
+import android.content.Context
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -14,12 +18,20 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import coil.compose.AsyncImage
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import java.io.File
+import java.io.FileOutputStream
 
 // ── โทนสีกาแฟมินิมอล ───────────────────────────────────────
 private val Cream      = Color(0xFFFAF6F1)
@@ -29,8 +41,14 @@ private val LatteLight = Color(0xFFD4A97A)
 private val CardBg     = Color(0xFFFFFFFF)
 private val DeleteRed  = Color(0xFFB85C5C)
 
+// ⚠️ ตั้งค่า BASE_URL ให้ตรงกับหลังบ้านของพี่
+private const val BASE_IMAGE_URL = "http://10.0.2.2:3520/uploads/"
+
 @Composable
 fun AdminCafeEditScreen(navController: NavController, viewModel: AppViewModel, cafeId: String) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+
     val cafes by viewModel.cafes.collectAsState()
     val menus by viewModel.menus.collectAsState()
     val categories by viewModel.categories.collectAsState()
@@ -43,17 +61,30 @@ fun AdminCafeEditScreen(navController: NavController, viewModel: AppViewModel, c
     var openTime  by remember { mutableStateOf(cafe?.openTime ?: "08:00:00") }
     var closeTime by remember { mutableStateOf(cafe?.closeTime ?: "20:00:00") }
 
+    // ── ส่วนจัดการรูปภาพร้านค้า ──
+    var cafeImageUri by remember { mutableStateOf<Uri?>(null) }
+    var cafeImageFile by remember { mutableStateOf<File?>(null) }
+
+    val launcher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            cafeImageUri = uri
+            coroutineScope.launch(Dispatchers.IO) {
+                cafeImageFile = createTempFileFromUri(context, uri)
+            }
+        }
+    }
+
     // State ควบคุม Dialogs
     var showOpenPicker by remember { mutableStateOf(false) }
     var showClosePicker by remember { mutableStateOf(false) }
     var showAddMenuDialog by remember { mutableStateOf(false) }
-
-    // 👈 State ควบคุม Dialog แก้ไข และ ลบเมนู
     var showEditMenuDialog by remember { mutableStateOf(false) }
     var showDeleteMenuDialog by remember { mutableStateOf(false) }
-    var selectedMenu by remember { mutableStateOf<MenuData?>(null) } // เก็บเมนูที่กำลังเลือกอยู่
+    var selectedMenu by remember { mutableStateOf<MenuData?>(null) }
 
-    // State สำหรับฟอร์มเมนู (ใช้ร่วมกันทั้ง Add และ Edit)
+    // State สำหรับฟอร์มเมนู
     var menuNameInput by remember { mutableStateOf("") }
     var menuPriceInput by remember { mutableStateOf("") }
     var selectedCategoryId by remember { mutableStateOf("") }
@@ -72,46 +103,26 @@ fun AdminCafeEditScreen(navController: NavController, viewModel: AppViewModel, c
         MyTimePickerDialog(closeTime, { showClosePicker = false }, { h, m -> closeTime = String.format("%02d:%02d:00", h, m); showClosePicker = false })
     }
 
-    // ── หน้าต่าง เพิ่มเมนู / แก้ไขเมนู (ใช้ Modal เดียวกัน แต่เปลี่ยน Logic) ──────────────────────
+    // ── หน้าต่าง เพิ่มเมนู / แก้ไขเมนู (ไม่มีรูปภาพ) ──────────────────────
     if (showAddMenuDialog || showEditMenuDialog) {
         val isEditMode = showEditMenuDialog
         AlertDialog(
-            onDismissRequest = {
-                showAddMenuDialog = false
-                showEditMenuDialog = false
-            },
-            title = {
-                Text(if (isEditMode) "แก้ไขเมนู" else "เพิ่มเมนูใหม่", color = Espresso, fontWeight = FontWeight.Bold)
-            },
+            onDismissRequest = { showAddMenuDialog = false; showEditMenuDialog = false },
+            title = { Text(if (isEditMode) "แก้ไขเมนู" else "เพิ่มเมนูใหม่", color = Espresso, fontWeight = FontWeight.Bold) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = menuNameInput, onValueChange = { menuNameInput = it },
-                        label = { Text("ชื่อเมนู") }, singleLine = true, modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = menuPriceInput,
-                        onValueChange = { if (it.isEmpty() || it.matches(Regex("^\\d*\\.?\\d*$"))) menuPriceInput = it },
-                        label = { Text("ราคา (บาท)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true, modifier = Modifier.fillMaxWidth()
-                    )
-                    ExposedDropdownMenuBox(
-                        expanded = categoryExpanded,
-                        onExpandedChange = { categoryExpanded = !categoryExpanded }
-                    ) {
+                    OutlinedTextField(value = menuNameInput, onValueChange = { menuNameInput = it }, label = { Text("ชื่อเมนู") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = menuPriceInput, onValueChange = { if (it.isEmpty() || it.matches(Regex("^\\d*\\.?\\d*$"))) menuPriceInput = it }, label = { Text("ราคา (บาท)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.fillMaxWidth())
+                    ExposedDropdownMenuBox(expanded = categoryExpanded, onExpandedChange = { categoryExpanded = !categoryExpanded }) {
                         OutlinedTextField(
                             value = categories.find { it.id == selectedCategoryId }?.name ?: "เลือกหมวดหมู่",
                             onValueChange = {}, readOnly = true, label = { Text("หมวดหมู่") },
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = categoryExpanded) },
-                            modifier = Modifier.menuAnchor().fillMaxWidth(),
-                            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
+                            modifier = Modifier.menuAnchor().fillMaxWidth(), colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
                         )
                         ExposedDropdownMenu(expanded = categoryExpanded, onDismissRequest = { categoryExpanded = false }) {
                             categories.forEach { category ->
-                                DropdownMenuItem(
-                                    text = { Text(category.name) },
-                                    onClick = { selectedCategoryId = category.id; categoryExpanded = false }
-                                )
+                                DropdownMenuItem(text = { Text(category.name) }, onClick = { selectedCategoryId = category.id; categoryExpanded = false })
                             }
                         }
                     }
@@ -121,44 +132,17 @@ fun AdminCafeEditScreen(navController: NavController, viewModel: AppViewModel, c
                 Button(
                     onClick = {
                         if (isEditMode && selectedMenu != null) {
-                            // 👈 ส่งอัปเดต ถ้าเป็นการแก้ไข
                             viewModel.updateMenu(selectedMenu!!.id, cafeId, menuNameInput, menuPriceInput, selectedCategoryId)
                         } else {
-                            // ส่งเพิ่ม ถ้าเป็นการสร้างใหม่
                             viewModel.addMenu(cafeId, menuNameInput, menuPriceInput, selectedCategoryId)
                         }
-                        showAddMenuDialog = false
-                        showEditMenuDialog = false
+                        showAddMenuDialog = false; showEditMenuDialog = false
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Latte),
                     enabled = menuNameInput.isNotBlank() && menuPriceInput.isNotBlank() && selectedCategoryId.isNotBlank()
                 ) { Text(if (isEditMode) "บันทึก" else "เพิ่ม") }
             },
-            dismissButton = {
-                TextButton(onClick = { showAddMenuDialog = false; showEditMenuDialog = false }) { Text("ยกเลิก") }
-            }
-        )
-    }
-
-    // ── หน้าต่าง ยืนยันการลบเมนู ──────────────────────
-    if (showDeleteMenuDialog && selectedMenu != null) {
-        AlertDialog(
-            onDismissRequest = { showDeleteMenuDialog = false },
-            title = { Text("ยืนยันการลบ", fontWeight = FontWeight.Bold, color = Espresso) },
-            text = { Text("คุณต้องการลบเมนู '${selectedMenu?.name}' ใช่หรือไม่?", color = Latte) },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        viewModel.deleteMenu(selectedMenu!!.id, cafeId)
-                        showDeleteMenuDialog = false
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = DeleteRed)
-                ) { Text("ลบเมนู", color = Color.White) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteMenuDialog = false }) { Text("ยกเลิก", color = Latte) }
-            },
-            containerColor = Cream
+            dismissButton = { TextButton(onClick = { showAddMenuDialog = false; showEditMenuDialog = false }) { Text("ยกเลิก") } }
         )
     }
 
@@ -173,7 +157,10 @@ fun AdminCafeEditScreen(navController: NavController, viewModel: AppViewModel, c
                 },
                 navigationIcon = { IconButton(onClick = { navController.popBackStack() }) { Icon(Icons.Outlined.ArrowBack, "กลับ", tint = Espresso) } },
                 actions = {
-                    TextButton(onClick = { viewModel.updateCafe(cafeId, name, location, openTime, closeTime, rating); navController.popBackStack() }) {
+                    TextButton(onClick = {
+                        viewModel.updateCafe(cafeId, name, location, openTime, closeTime, rating, cafeImageFile)
+                        navController.popBackStack()
+                    }) {
                         Text("บันทึก", color = Latte, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
                     }
                 },
@@ -192,6 +179,41 @@ fun AdminCafeEditScreen(navController: NavController, viewModel: AppViewModel, c
             item {
                 CafeCard {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+
+                        // ── ส่วนแสดงรูปภาพ (จุดสำคัญที่ทำให้รูปโชว์) ──
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(180.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Cream)
+                                .clickable { launcher.launch("image/*") },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            // 👈 ลอจิกเช็คลำดับความสำคัญของรูป
+                            val imageSource: Any? = when {
+                                cafeImageFile != null -> cafeImageFile                // 1. รูปที่เพิ่งเลือกใหม่
+                                cafeImageUri != null -> cafeImageUri                  // 2. รูปที่เพิ่งเลือกใหม่ (Uri)
+                                !cafe?.img.isNullOrEmpty() -> BASE_IMAGE_URL + cafe?.img // 3. รูปเก่าจาก Server
+                                else -> null                                          // 4. ไม่มีรูป
+                            }
+
+                            if (imageSource != null) {
+                                AsyncImage(
+                                    model = imageSource,
+                                    contentDescription = "Cafe Image",
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop
+                                )
+                            } else {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(Icons.Outlined.AddPhotoAlternate, null, modifier = Modifier.size(48.dp), tint = LatteLight)
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text("แตะเพื่อเปลี่ยนรูปร้าน", fontSize = 14.sp, color = Latte)
+                                }
+                            }
+                        }
+
                         CafeEditField(value = name, onValueChange = { name = it }, label = "ชื่อร้าน", icon = Icons.Outlined.Home)
                         CafeEditField(value = location, onValueChange = { location = it }, label = "ที่อยู่", icon = Icons.Outlined.LocationOn)
                         CafeEditField(value = rating, onValueChange = { rating = it }, label = "คะแนนร้าน (0.0 - 5.0)", icon = Icons.Outlined.Star)
@@ -208,13 +230,7 @@ fun AdminCafeEditScreen(navController: NavController, viewModel: AppViewModel, c
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     SectionLabel(text = "เมนูในร้าน")
                     OutlinedButton(
-                        onClick = {
-                            // 👈 ล้างค่าในฟอร์มก่อนเปิด Dialog แบบ "เพิ่ม"
-                            menuNameInput = ""
-                            menuPriceInput = ""
-                            selectedCategoryId = ""
-                            showAddMenuDialog = true
-                        },
+                        onClick = { menuNameInput = ""; menuPriceInput = ""; selectedCategoryId = ""; showAddMenuDialog = true },
                         shape = RoundedCornerShape(10.dp),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = Latte)
                     ) {
@@ -225,33 +241,26 @@ fun AdminCafeEditScreen(navController: NavController, viewModel: AppViewModel, c
                 }
             }
 
-            if (menus.isEmpty()) {
-                item { CafeCard { Box(modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) { Text("ยังไม่มีเมนูในร้าน", color = Latte.copy(alpha = 0.6f), fontSize = 14.sp) } } }
-            }
-
             items(menus) { menu ->
                 MenuAdminCard(
                     menu = menu,
                     onEdit = {
-                        // 👈 ดึงข้อมูลเก่ามาใส่ฟอร์มก่อนเปิด Dialog แบบ "แก้ไข"
                         selectedMenu = menu
                         menuNameInput = menu.name
                         menuPriceInput = menu.price
-                        selectedCategoryId = menu.categoryId ?: "" // TODO: ถ้าฐานข้อมูลส่ง CategoryID ของเมนูมาด้วย ให้เอามาใส่ตรงนี้
+                        selectedCategoryId = menu.categoryId ?: ""
                         showEditMenuDialog = true
                     },
-                    onDelete = {
-                        // 👈 โชว์ Dialog ถามความแน่ใจก่อนลบ
-                        selectedMenu = menu
-                        showDeleteMenuDialog = true
-                    }
+                    onDelete = { selectedMenu = menu; showDeleteMenuDialog = true }
                 )
             }
         }
     }
 }
 
-// ── Reusable Components (Sub-functions) ──────────────────────
+// ── ฟังก์ชันตัวช่วย (ใส่ private ไว้กันชื่อซ้ำ) ──────────────────────
+
+
 @Composable
 fun MyTimePickerDialog(initialTime: String, onDismiss: () -> Unit, onConfirm: (Int, Int) -> Unit) {
     val parts = initialTime.split(":")

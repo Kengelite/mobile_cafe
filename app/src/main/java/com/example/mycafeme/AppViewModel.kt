@@ -7,6 +7,15 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import android.content.Context
+import android.net.Uri
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.asRequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
+import java.io.File
+import java.io.FileOutputStream
+import kotlinx.coroutines.launch
 
 // 1. เปลี่ยนจาก ViewModel เป็น AndroidViewModel เพื่อใช้ Context สำหรับ SessionManager
 class AppViewModel(application: Application) : AndroidViewModel(application) {
@@ -225,18 +234,31 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun addCafe(name: String, location: String, open: String, close: String, rating: String) {
+    // 👈 เปลี่ยนพารามิเตอร์ให้ตรงกับที่หน้า UI ส่งมา
+    fun addCafe(name: String, location: String, open: String, close: String, rating: String, imageFile: File?) {
         viewModelScope.launch {
             try {
-                val body = mapOf(
-                    "Cafe_Name" to name,
-                    "Cafe_Location" to location,
-                    "Cafe_OpenTime" to open,
-                    "Cafe_CloseTime" to close,
-                    "Cafe_Rating" to rating
+                // แปลงข้อความ String ให้เป็น RequestBody
+                val nameReq = name.toRequestBody("text/plain".toMediaTypeOrNull())
+                val locReq = location.toRequestBody("text/plain".toMediaTypeOrNull())
+                val openReq = open.toRequestBody("text/plain".toMediaTypeOrNull())
+                val closeReq = close.toRequestBody("text/plain".toMediaTypeOrNull())
+                val ratingReq = rating.toRequestBody("text/plain".toMediaTypeOrNull())
+
+                // จัดการไฟล์รูปภาพ
+                var imagePart: MultipartBody.Part? = null
+
+                // 👈 เช็คจาก imageFile ที่ส่งมาได้เลย ไม่ต้องใช้ Context แปลงแล้ว
+                if (imageFile != null) {
+                    val requestFile = imageFile.asRequestBody("image/*".toMediaTypeOrNull())
+                    imagePart = MultipartBody.Part.createFormData("image", imageFile.name, requestFile)
+                }
+
+                // ยิงไปที่ API สำหรับ POST แบบ Multipart
+                val response = RetrofitClient.apiService.addCafe(
+                    nameReq, locReq, openReq, closeReq, ratingReq, imagePart
                 )
-                // ยิงไปที่ API สำหรับ POST
-                val response = RetrofitClient.apiService.addCafe(body)
+
                 if (response.success) {
                     fetchCafes() // เพิ่มเสร็จ รีเฟรชลิสต์ทันที
                 }
@@ -247,25 +269,50 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
 
-    fun updateCafe(id: String, name: String, location: String, open: String, close: String, rating: String) {
+    private fun getFileFromUri(context: Context, uri: Uri): File? {
+        return try {
+            val inputStream = context.contentResolver.openInputStream(uri) ?: return null
+            val tempFile = File(context.cacheDir, "upload_image_${System.currentTimeMillis()}.jpg")
+            val outputStream = FileOutputStream(tempFile)
+            inputStream.copyTo(outputStream)
+            inputStream.close()
+            outputStream.close()
+            tempFile
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+
+    fun updateCafe(cafeId: String, name: String, location: String, open: String, close: String, rating: String, imageFile: File?) {
         viewModelScope.launch {
             try {
-                val body = mapOf(
-                    "Cafe_Name" to name,
-                    "Cafe_Location" to location,
-                    "Cafe_OpenTime" to open,
-                    "Cafe_CloseTime" to close,
-                    "Cafe_Rating" to rating
+                val idReq = cafeId.toRequestBody("text/plain".toMediaTypeOrNull())
+                val nameReq = name.toRequestBody("text/plain".toMediaTypeOrNull())
+                val locReq = location.toRequestBody("text/plain".toMediaTypeOrNull())
+                val openReq = open.toRequestBody("text/plain".toMediaTypeOrNull())
+                val closeReq = close.toRequestBody("text/plain".toMediaTypeOrNull())
+                val ratingReq = rating.toRequestBody("text/plain".toMediaTypeOrNull())
+
+                var imagePart: MultipartBody.Part? = null
+                if (imageFile != null) {
+                    val requestFile = imageFile.asRequestBody("image/*".toMediaTypeOrNull())
+                    imagePart = MultipartBody.Part.createFormData("image", imageFile.name, requestFile)
+                }
+
+                val response = RetrofitClient.apiService.updateCafe(
+                    idReq, nameReq, locReq, openReq, closeReq, ratingReq, imagePart
                 )
-                val response = RetrofitClient.apiService.updateCafe(id, body)
+
                 if (response.success) {
-                    fetchCafes()
+                    fetchCafes() // รีเฟรชข้อมูลร้านค้าใหม่
                 }
             } catch (e: Exception) {
-                android.util.Log.e("API_ERROR", "Update Failed", e)
+                android.util.Log.e("API_ERROR", "Update Cafe Failed", e)
             }
         }
     }
+
 
     fun deleteCafe(id: String) {
         viewModelScope.launch {

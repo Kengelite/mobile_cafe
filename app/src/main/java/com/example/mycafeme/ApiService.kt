@@ -8,8 +8,10 @@ import retrofit2.http.POST
 import retrofit2.http.PUT
 import retrofit2.http.Path
 import retrofit2.http.DELETE
-
-
+import okhttp3.RequestBody
+import retrofit2.http.Multipart
+import retrofit2.http.Part
+import okhttp3.MultipartBody
 // 1. API Interface
 interface CafeApiService {
     @POST("api/login")
@@ -33,11 +35,58 @@ interface CafeApiService {
     @GET("api/cafes")
     suspend fun getCafes(): CafeResponse
 
-    @POST("api/cafes")
-    suspend fun addCafe(@Body cafeData: Map<String, String>): SimpleResponse
+//    @POST("api/cafes")
+//    suspend fun addCafe(@Body cafeData: Map<String, String>): SimpleResponse
 
-    @PUT("api/cafes/{id}")
-    suspend fun updateCafe(@Path("id") id: String, @Body cafeData: Map<String, String>): SimpleResponse
+    @Multipart
+    @POST("/api/cafe/add") // เปลี่ยน URL ให้ตรงกับ Node.js ของพี่นะครับ
+    suspend fun addCafe(
+        @Part("Cafe_Name") name: RequestBody,
+        @Part("Cafe_Location") location: RequestBody,
+        @Part("Cafe_OpenTime") openTime: RequestBody,
+        @Part("Cafe_CloseTime") closeTime: RequestBody,
+        @Part("Cafe_Rating") rating: RequestBody,
+        @Part image: MultipartBody.Part? // 👈 ตัวนี้คือไฟล์รูปภาพ (เป็น null ได้ถ้าร้านไม่มีรูป)
+    ): GenericResponse
+
+
+    // 1. อัปเดตข้อมูลร้านค้า (มีรูป)
+    @Multipart
+    @POST("/api/cafe/update")
+    suspend fun updateCafe(
+        @Part("Cafe_ID") cafeId: RequestBody,
+        @Part("Cafe_Name") name: RequestBody,
+        @Part("Cafe_Location") location: RequestBody,
+        @Part("Cafe_OpenTime") openTime: RequestBody,
+        @Part("Cafe_CloseTime") closeTime: RequestBody,
+        @Part("Cafe_Rating") rating: RequestBody,
+        @Part image: MultipartBody.Part?
+    ): GenericResponse
+
+
+    // 2. เพิ่มเมนูใหม่ (มีรูป)
+//    @Multipart
+//    @POST("/api/menu/add")
+//    suspend fun addMenu(
+//        @Part("Cafe_ID") cafeId: RequestBody,
+//        @Part("Menu_Name") name: RequestBody,
+//        @Part("Menu_Price") price: RequestBody,
+//        @Part("Category_ID") categoryId: RequestBody,
+//        @Part image: MultipartBody.Part?
+//    ): GenericResponse
+
+    // 3. อัปเดตเมนู (มีรูป)
+//    @Multipart
+//    @POST("/api/menu/update")
+//    suspend fun updateMenu(
+//        @Part("Menu_Id") menuId: RequestBody,
+//        @Part("Cafe_ID") cafeId: RequestBody,
+//        @Part("Menu_Name") name: RequestBody,
+//        @Part("Menu_Price") price: RequestBody,
+//        @Part("Category_ID") categoryId: RequestBody,
+//        @Part image: MultipartBody.Part?
+//    ): GenericResponse
+//
 
     @DELETE("api/cafes/{id}")
     suspend fun deleteCafe(@Path("id") id: String): SimpleResponse

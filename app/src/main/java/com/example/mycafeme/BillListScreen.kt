@@ -9,12 +9,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ReceiptLong
+import androidx.compose.material.icons.filled.Storefront // 👈 เพิ่ม Icon รูปร้านค้า
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
@@ -66,7 +68,6 @@ fun OrderHistoryScreen(navController: NavController, viewModel: AppViewModel) {
                 ) {
                     items(bills) { bill ->
                         HistoryCard(bill) {
-                            // นำทางไปหน้าดีเทลโดยใช้ชื่อใหม่
                             navController.navigate("order_detail/${bill.id}")
                         }
                     }
@@ -92,8 +93,25 @@ fun HistoryCard(bill: BillListData, onClick: () -> Unit) {
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(text = "ออเดอร์: ${bill.id.takeLast(8)}", fontWeight = FontWeight.Bold, color = Espresso)
+                // 👈 โชว์ชื่อร้าน พร้อมไอคอน
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Storefront, contentDescription = "Cafe", modifier = Modifier.size(18.dp), tint = Latte)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = bill.cafeName ?: "ไม่ทราบชื่อร้าน",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp,
+                        color = Espresso,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Text(text = "ออเดอร์: ${bill.id.takeLast(8)}", fontSize = 12.sp, color = Color.Gray)
                 Text(text = bill.date, fontSize = 12.sp, color = Color.Gray)
+
                 Spacer(modifier = Modifier.height(8.dp))
                 StatusBadge(bill.status)
             }

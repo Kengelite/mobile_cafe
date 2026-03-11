@@ -20,17 +20,22 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import kotlinx.coroutines.launch
+import coil.compose.AsyncImage // 👈 อย่าลืม Import Coil นะครับ
 
 private val Cream      = Color(0xFFFAF6F1)
 private val Espresso   = Color(0xFF2C1A0E)
 private val Latte      = Color(0xFF8B5E3C)
 private val CardBg     = Color(0xFFFFFFFF)
+
+// ⚠️ เปลี่ยน URL ให้ตรงกับเครื่องของพี่นะครับ (10.0.2.2 สำหรับรันบน Emulator)
+private const val BASE_IMAGE_URL = "http://10.0.2.2:3520/uploads/"
 
 @Composable
 fun MenuListScreen(navController: NavController, viewModel: AppViewModel, cafeId: String) {
@@ -40,7 +45,6 @@ fun MenuListScreen(navController: NavController, viewModel: AppViewModel, cafeId
     val cafes by viewModel.cafes.collectAsState()
     val currentCafe = cafes.find { it.id == cafeId }
 
-    // 👈 สร้างตัวแปรสำหรับควบคุมการแจ้งเตือน (Snackbar)
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
 
@@ -49,7 +53,6 @@ fun MenuListScreen(navController: NavController, viewModel: AppViewModel, cafeId
     }
 
     Scaffold(
-        // 👈 แปะ Snackbar ไว้ใน Scaffold เพื่อให้มันโผล่ขึ้นมาตรงขอบล่างของจอ
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             CenterAlignedTopAppBar(
@@ -65,7 +68,6 @@ fun MenuListScreen(navController: NavController, viewModel: AppViewModel, cafeId
         containerColor = Cream,
         floatingActionButton = {
             ExtendedFloatingActionButton(
-                // 👈 เปลี่ยนจาก TODO เป็นคำสั่งนี้ครับ
                 onClick = { navController.navigate("cart") },
                 containerColor = Espresso,
                 contentColor = Color.White,
@@ -103,20 +105,17 @@ fun MenuListScreen(navController: NavController, viewModel: AppViewModel, cafeId
                     } else {
                         items(menus) { menu ->
                             MenuCard(menu) { finalQuantity ->
-                                //  เมื่อกด "เพิ่ม" ให้ยิง API ไปหา Node.js
                                 viewModel.addToCart(
                                     cafeId = cafeId,
                                     menuId = menu.id,
                                     quantity = finalQuantity,
                                     price = menu.price.toDoubleOrNull() ?: 0.0,
                                     onSuccess = {
-                                        // ยิงสำเร็จ โชว์แจ้งเตือนสวยๆ
                                         coroutineScope.launch {
                                             snackbarHostState.showSnackbar("เพิ่ม ${menu.name} ลงตะกร้าแล้ว!")
                                         }
                                     },
                                     onError = { errorMsg ->
-                                        // ยิงไม่สำเร็จ โชว์ข้อผิดพลาด
                                         coroutineScope.launch {
                                             snackbarHostState.showSnackbar("$errorMsg")
                                         }
@@ -140,15 +139,28 @@ fun CafeHeader(cafe: CafeData) {
         modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Box(
-            modifier = Modifier
-                .size(90.dp)
-                .clip(CircleShape)
-                .background(Latte.copy(alpha = 0.15f)),
-            contentAlignment = Alignment.Center
-        ) {
-            val initial = if (cafe.name.isNotEmpty()) cafe.name.take(1) else "?"
-            Text(text = initial, fontSize = 36.sp, fontWeight = FontWeight.Bold, color = Latte)
+        // 👈 เปลี่ยนมาใช้เงื่อนไขโหลดรูปร้านกาแฟ
+        if (!cafe.img.isNullOrEmpty()) {
+            AsyncImage(
+                model = BASE_IMAGE_URL + cafe.img,
+                contentDescription = "ภาพของร้าน ${cafe.name}",
+                modifier = Modifier
+                    .size(90.dp)
+                    .clip(CircleShape)
+                    .background(Latte.copy(alpha = 0.15f)),
+                contentScale = ContentScale.Crop
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .size(90.dp)
+                    .clip(CircleShape)
+                    .background(Latte.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
+                val initial = if (cafe.name.isNotEmpty()) cafe.name.take(1) else "?"
+                Text(text = initial, fontSize = 36.sp, fontWeight = FontWeight.Bold, color = Latte)
+            }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -190,15 +202,32 @@ fun MenuCard(menu: MenuData, onAddClick: (Int) -> Unit) {
             modifier = Modifier.padding(16.dp).fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                modifier = Modifier
-                    .size(65.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Latte.copy(alpha = 0.1f)),
-                contentAlignment = Alignment.Center
-            ) {
-                val initial = if (menu.name.isNotEmpty()) menu.name.take(1) else "?"
-                Text(text = initial, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Latte)
+            // 👈 เปลี่ยนมาใช้เงื่อนไขโหลดรูปเครื่องดื่ม/เมนู
+            // 💡 หมายเหตุ: ใน Data Class "MenuData" ต้องมีตัวแปร val img: String? ด้วยนะครับ
+            if (!menu.CategoryImage.isNullOrEmpty()) {
+                val baseUrl = "http://10.0.2.2:3520/uploads/"
+                val fullImageUrl = baseUrl + menu.CategoryImage
+
+                AsyncImage(
+                    model = fullImageUrl,
+                    contentDescription = "ภาพของเมนู ${menu.name}",
+                    modifier = Modifier
+                        .size(65.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Latte.copy(alpha = 0.1f)),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(65.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Latte.copy(alpha = 0.1f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    val initial = if (menu.name.isNotEmpty()) menu.name.take(1) else "?"
+                    Text(text = initial, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Latte)
+                }
             }
 
             Spacer(modifier = Modifier.width(16.dp))

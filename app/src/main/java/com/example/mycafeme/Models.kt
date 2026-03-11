@@ -14,7 +14,6 @@ data class CafeData(
     @SerializedName("Cafe_CloseTime")
     val closeTime: String,
 
-
     @SerializedName("Cafe_Location")
     val location: String, // ผมเปลี่ยนชื่อจาก category เป็น location ให้สอดคล้องกับข้อมูลจริงนะครับ
 
@@ -89,6 +88,11 @@ data class MenuData(
     // ฐานข้อมูลพี่ใช้ Cafe_Cafe_ID เลยต้องดักไว้ด้วยครับ
     @SerializedName(value = "Cafe_Cafe_ID", alternate = ["Cafe_ID", "cafe_id"])
     val cafeId: String? ,// ใส่ ? เผื่อไว้กันเหนียว
+
+
+    @SerializedName("Category_Image")
+    val CategoryImage: String?,
+
 
     @SerializedName("category_category_Id")
     val categoryId: String?

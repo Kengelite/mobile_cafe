@@ -43,7 +43,7 @@ fun AdminMenuScreen(navController: NavController) {
         AdminMenuItem("Customer", Icons.Outlined.Person,       "admin_user_screen"),
 //        AdminMenuItem("Menu",     Icons.Outlined.Menu,         "admin_menu_items"),
         AdminMenuItem("Order",    Icons.Outlined.ShoppingCart, "admin_order"),
-        AdminMenuItem("Payment",  Icons.Outlined.CheckCircle,  "admin_payment"),
+//        AdminMenuItem("Payment",  Icons.Outlined.CheckCircle,  "admin_payment"),
 //        AdminMenuItem("Status",   Icons.Outlined.Info,         "admin_status"),
         AdminMenuItem("Logout",   Icons.Outlined.ExitToApp,    "logout", isDestructive = true)
     )

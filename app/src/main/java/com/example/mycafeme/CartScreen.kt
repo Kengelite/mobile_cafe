@@ -19,6 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import kotlinx.coroutines.launch
 
 private val Cream      = Color(0xFFFAF6F1)
 private val Espresso   = Color(0xFF2C1A0E)
@@ -31,6 +32,9 @@ fun CartScreen(navController: NavController, viewModel: AppViewModel) {
     val cartItems by viewModel.cartItems.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
 
+    val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
+
     LaunchedEffect(Unit) {
         viewModel.fetchCartItems()
     }
@@ -40,6 +44,7 @@ fun CartScreen(navController: NavController, viewModel: AppViewModel) {
     val netTotal = subTotal + serviceFee
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) }, // 👈 เพิ่ม Snackbar สำหรับแจ้งเตือน
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text("ตะกร้าสินค้า", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Espresso) },
@@ -84,7 +89,24 @@ fun CartScreen(navController: NavController, viewModel: AppViewModel) {
                     item {
                         Spacer(modifier = Modifier.height(16.dp))
                         CartSummaryFooter(subTotal, serviceFee, netTotal) {
-                            // TODO: ยืนยันสั่งซื้อ
+                            // 👈 เรียกใช้งานฟังก์ชันยืนยันการสั่งซื้อ
+                            viewModel.confirmOrder(
+                                netTotal = netTotal,
+                                onSuccess = {
+                                    coroutineScope.launch {
+                                        snackbarHostState.showSnackbar("ส่งคำสั่งซื้อสำเร็จ!")
+                                        // เด้งไปหน้าประวัติบิล พร้อมเคลียร์หน้าตะกร้าออกจาก Stack
+                                        navController.navigate("order_history") {
+                                            popUpTo("cart") { inclusive = true }
+                                        }
+                                    }
+                                },
+                                onError = { errorMsg ->
+                                    coroutineScope.launch {
+                                        snackbarHostState.showSnackbar(errorMsg)
+                                    }
+                                }
+                            )
                         }
                         Spacer(modifier = Modifier.height(32.dp))
                     }
@@ -106,7 +128,6 @@ fun CartItemCard(item: CartItemData, onRemove: () -> Unit) {
             modifier = Modifier.padding(16.dp).fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // รูปย่อชื่อเมนู
             Box(
                 modifier = Modifier.size(55.dp).clip(RoundedCornerShape(12.dp)).background(Latte.copy(alpha = 0.1f)),
                 contentAlignment = Alignment.Center
@@ -114,10 +135,7 @@ fun CartItemCard(item: CartItemData, onRemove: () -> Unit) {
                 val initial = if (item.menuName.isNotEmpty()) item.menuName.take(1) else "?"
                 Text(text = initial, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Latte)
             }
-
             Spacer(modifier = Modifier.width(16.dp))
-
-            // รายละเอียดชื่อและจำนวน (แบบ Fix เลข)
             Column(modifier = Modifier.weight(1f)) {
                 Text(text = item.menuName, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Espresso)
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -125,8 +143,6 @@ fun CartItemCard(item: CartItemData, onRemove: () -> Unit) {
                     Text(text = "  •  จำนวน: ${item.quantity}", fontSize = 13.sp, color = Color.Gray)
                 }
             }
-
-            // 👈 เหลือแค่ปุ่มลบปุ่มเดียวครับ
             IconButton(
                 onClick = onRemove,
                 modifier = Modifier.background(DangerRed.copy(alpha = 0.1f), RoundedCornerShape(12.dp))

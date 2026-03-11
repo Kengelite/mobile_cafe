@@ -113,6 +113,10 @@ interface CafeApiService {
     @DELETE("/api/cart/item/{id}")
     suspend fun deleteCartItem(@Path("id") detailId: String): GenericResponse
 
+
+    @PUT("/api/orders/confirm")
+    suspend fun confirmOrder(@Body body: @JvmSuppressWildcards Map<String, Any>): GenericResponse
+
 }
 
 object RetrofitClient {

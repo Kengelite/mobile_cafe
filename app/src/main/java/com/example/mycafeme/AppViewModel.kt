@@ -565,6 +565,30 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
 
 
+    fun confirmOrder(netTotal: Double, onSuccess: () -> Unit, onError: (String) -> Unit) {
+        viewModelScope.launch {
+            val agencyId = _currentUser.value?.id ?: return@launch
+            try {
+                val response = RetrofitClient.apiService.confirmOrder(mapOf(
+                    "agencyId" to agencyId,
+                    "netTotal" to netTotal
+                ))
+
+                if (response.success) {
+                    _cartItems.value = emptyList() // ล้างตะกร้าในแอปหลังสั่งซื้อเสร็จ
+                    onSuccess()
+                } else {
+                    onError(response.message ?: "ยืนยันคำสั่งซื้อไม่สำเร็จ")
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("API_ERROR", "Confirm Order Error: ", e)
+                onError("เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์")
+            }
+        }
+    }
+
+
+
 
 
 
